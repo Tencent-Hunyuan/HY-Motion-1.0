@@ -26,6 +26,22 @@
   </a>
 </div>
 
+---
+
+## 🎨 **Enhanced Fork - Custom Character Retargeting**
+
+> **⭐ This is a community-enhanced fork of [Tencent-Hunyuan/HY-Motion-1.0](https://github.com/Tencent-Hunyuan/HY-Motion-1.0)**
+
+### ✨ New Features in This Fork:
+- 🎭 **Custom FBX Upload**: Upload your own rigged character models from Mixamo, Adobe Fuse, or any FBX-compatible software
+- 🎬 **Automatic Retargeting**: Generated motions are automatically retargeted to your custom character's skeleton structure
+- 👁️ **Live 3D Preview**: View all generated characters side-by-side in an interactive 3D viewer with 1-unit spacing
+- 📦 **Batch Export**: Download both the original wooden model and retargeted FBX files with motion data in NPZ format
+
+### 🙏 Acknowledgments:
+Special thanks to [@Aero-Ex/ComfyUI-HyMotion](https://github.com/Aero-Ex/ComfyUI-HyMotion/blob/main/nodes_modular.py) for providing the retargeting implementation that made this feature possible!
+
+---
 
 # HY-Motion 1.0: Scaling Flow Matching Models for 3D Motion Generation
 

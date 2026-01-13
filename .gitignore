@@ -19,3 +19,4 @@ test_*/
 debug
 tencent
 output
+.venv/

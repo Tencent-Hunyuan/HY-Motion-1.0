@@ -207,6 +207,8 @@ def save_visualization_data(
         "text_rewrite": rewritten_text,
         "smpl_data": all_smpl_data,
         "meta_data": [],
+        "rot6d": rot6d,  # Add rot6d format data for FBX retargeting
+        "transl": transl,
     }
 
     # return base filename, subsequent logic will use this as a basis for finding _meta.json or _000.npz

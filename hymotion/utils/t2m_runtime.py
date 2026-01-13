@@ -5,6 +5,7 @@ import time
 import uuid
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import yaml
 
@@ -85,6 +86,16 @@ class T2MRuntime:
         if self.skip_model_loading:
             print(">>> [WARNING] Checkpoint not found, will use randomly initialized model weights")
         self.load()
+        
+        # Initialize body model for keypoints3d generation
+        try:
+            from ..pipeline.body_model import WoodenMesh
+            self.body_model = WoodenMesh()
+            print(">>> Body model (WoodenMesh) initialized")
+        except Exception as e:
+            print(f">>> Failed to initialize body model: {e}")
+            self.body_model = None
+        
         self.fbx_available = FBX_AVAILABLE
         if self.fbx_available:
             try:
@@ -401,6 +412,11 @@ class T2MRuntime:
         unique_id = str(uuid.uuid4())[:8]
         text = visualization_data["text"]
         timestamp = visualization_data["timestamp"]
+        
+        # Get rot6d format data for NPZ saving (matching HYMotionSaveNPZ format)
+        rot6d_data = visualization_data.get("rot6d")  # (batch_size, num_frames, 22, 6)
+        transl_data = visualization_data.get("transl")  # (batch_size, num_frames, 3)
+        
         for bb in range(len(smpl_data_list)):
             smpl_data = smpl_data_list[bb]
             if fbx_filename is None:
@@ -412,6 +428,38 @@ class T2MRuntime:
             if success:
                 fbx_files.append(fbx_path)
                 print(f"\t>>> FBX file generated: {fbx_path}")
+                
+                # Save NPZ file in rot6d format (matching HYMotionSaveNPZ)
+                if rot6d_data is not None and transl_data is not None:
+                    npz_path = fbx_path.replace(".fbx", ".npz")
+                    from ..utils.geometry import rot6d_to_rotation_matrix
+                    
+                    # Extract data for this batch sample
+                    rot6d_bb = rot6d_data[bb] if hasattr(rot6d_data[bb], 'cpu') else torch.from_numpy(rot6d_data[bb])
+                    transl_bb = transl_data[bb] if hasattr(transl_data[bb], 'cpu') else torch.from_numpy(transl_data[bb])
+                    
+                    # Compute root_rotations_mat and keypoints3d
+                    root_rotations_mat = rot6d_to_rotation_matrix(rot6d_bb[:, 0])  # First joint is root
+                    
+                    # Generate keypoints3d using body model if available
+                    keypoints3d = None
+                    if hasattr(self, 'body_model') and self.body_model is not None:
+                        with torch.no_grad():
+                            body_out = self.body_model.forward({"rot6d": rot6d_bb.cpu(), "trans": transl_bb.cpu()})
+                            keypoints3d = body_out["keypoints3d"]  # (num_frames, 52, 3)
+                    else:
+                        # Fallback: create placeholder keypoints3d
+                        keypoints3d = torch.zeros(rot6d_bb.shape[0], 52, 3)
+                    
+                    # Save in rot6d format matching HYMotionSaveNPZ
+                    npz_dict = {
+                        "rot6d": rot6d_bb.cpu().numpy() if hasattr(rot6d_bb, 'cpu') else rot6d_bb,
+                        "transl": transl_bb.cpu().numpy() if hasattr(transl_bb, 'cpu') else transl_bb,
+                        "root_rotations_mat": root_rotations_mat.cpu().numpy() if hasattr(root_rotations_mat, 'cpu') else root_rotations_mat,
+                        "keypoints3d": keypoints3d.cpu().numpy() if hasattr(keypoints3d, 'cpu') else keypoints3d,
+                    }
+                    np.savez_compressed(npz_path, **npz_dict)
+                
                 txt_path = fbx_path.replace(".fbx", ".txt")
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(text)

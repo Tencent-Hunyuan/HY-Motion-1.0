@@ -486,6 +486,7 @@ class T2MGradioUI:
         seed_input: str,
         duration: float,
         cfg_scale: float,
+        custom_fbx_path: Optional[str] = None,
     ) -> Tuple[str, List[str]]:
         # When rewrite is not available, use original_text directly
         if not self.prompt_engineering_available:
@@ -513,6 +514,13 @@ class T2MGradioUI:
                 original_text=original_text,
                 output_dir=self.args.output_dir,
             )
+            
+            # If custom FBX is provided, retarget the generated motion to it
+            preview_html = None
+            if custom_fbx_path and fbx_ok:
+                print(f">>> Starting custom FBX retargeting: {custom_fbx_path}")
+                fbx_files, preview_html = self._retarget_to_custom_fbx(fbx_files, custom_fbx_path)
+            
             # Escape HTML content for srcdoc attribute
             escaped_html = html_content.replace('"', "&quot;")
             # Return iframe with srcdoc - directly embed HTML content
@@ -524,13 +532,376 @@ class T2MGradioUI:
                     style="border: none; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);"
                 ></iframe>
             """
+            
+            # If we have 3D preview, return it as well
+            if preview_html:
+                preview_iframe = f"""
+                    <iframe
+                        srcdoc="{preview_html.replace('"', '&quot;')}"
+                        width="100%"
+                        height="750px"
+                        style="border: none; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-top: 10px;"
+                    ></iframe>
+                """
+                iframe_html = iframe_html + preview_iframe
+            
             return iframe_html, fbx_files
         except Exception as e:
             print(f"\t>>> Motion generation failed: {e}")
+            import traceback
+            traceback.print_exc()
             return (
                 f"❌ Motion generation failed: {str(e)}\n\nPlease check the input parameters or try again later",
                 [],
             )
+    
+    def _retarget_to_custom_fbx(self, original_fbx_files, custom_fbx_path):
+        """Retarget generated motion to custom FBX skeleton."""
+        from hymotion.utils.fbx_export import export_motion_to_fbx, load_motion_from_npz
+        
+        retargeted_files = []
+        
+        # Process each NPZ file (find matching NPZ for each FBX)
+        for fbx_file in original_fbx_files:
+            if not fbx_file.endswith('.fbx'):
+                continue
+                
+            # Find corresponding NPZ file (same base name)
+            npz_file = fbx_file.replace('.fbx', '.npz')
+            if not os.path.exists(npz_file):
+                print(f"Warning: NPZ file not found for {fbx_file}")
+                continue
+            
+            try:
+                # Load motion data from NPZ
+                motion_data = load_motion_from_npz(npz_file)
+                
+                # Generate output filename
+                base_name = os.path.basename(fbx_file).replace('.fbx', '')
+                output_fbx = os.path.join(
+                    os.path.dirname(fbx_file),
+                    f"retargeted_{base_name}.fbx"
+                )
+                
+                # Get text description if available
+                txt_file = fbx_file.replace('.fbx', '.txt')
+                text_description = ""
+                if os.path.exists(txt_file):
+                    with open(txt_file, 'r', encoding='utf-8') as f:
+                        text_description = f.read().strip()
+                
+                # Export with retargeting
+                success = export_motion_to_fbx(
+                    motion_data=motion_data,
+                    output_path=output_fbx,
+                    text_description=text_description,
+                    template_fbx=custom_fbx_path,
+                )
+                
+                if success:
+                    retargeted_files.append(output_fbx)
+                    # Copy text description to retargeted file
+                    if text_description:
+                        retargeted_txt = output_fbx.replace('.fbx', '.txt')
+                        with open(retargeted_txt, 'w', encoding='utf-8') as f:
+                            f.write(text_description)
+                        retargeted_files.append(retargeted_txt)
+                    print(f">>> Retargeted: {os.path.basename(output_fbx)}")
+                else:
+                    print(f">>> Failed to retarget: {os.path.basename(fbx_file)}")
+                    
+            except Exception as e:
+                print(f">>> Error retargeting {fbx_file}: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        if retargeted_files:
+            print(f">>> Retargeting complete: {len(retargeted_files)} files")
+            combined_files = original_fbx_files + retargeted_files
+            
+            # Try to generate 3D preview for all FBX files
+            try:
+                preview_html = self._generate_3d_preview(combined_files)
+            except Exception as e:
+                print(f">>> 3D preview generation failed: {e}")
+                preview_html = None
+            
+            return combined_files, preview_html
+        else:
+            print(">>> No retargeted files created")
+            return original_fbx_files, None
+    
+    def _generate_3d_preview(self, fbx_files):
+        """Generate 3D preview HTML for multiple FBX files with spacing."""
+        # Filter only FBX files
+        fbx_only = [f for f in fbx_files if f.endswith('.fbx')]
+        
+        if not fbx_only:
+            return None
+        
+        print(f">>> Generating 3D preview for {len(fbx_only)} FBX files...")
+        
+        # Read FBX files and encode as base64
+        import base64
+        fbx_data_list = []
+        for i, fbx_file in enumerate(fbx_only):
+            try:
+                with open(fbx_file, 'rb') as f:
+                    fbx_data = base64.b64encode(f.read()).decode('utf-8')
+                    fbx_data_list.append({
+                        'data': fbx_data,
+                        'name': os.path.basename(fbx_file),
+                        'x_offset': i * 1.0  # Space each model 1 unit apart on X-axis
+                    })
+            except Exception as e:
+                print(f">>> Failed to read {fbx_file}: {e}")
+        
+        if not fbx_data_list:
+            return None
+        
+        # Generate Three.js HTML with multiple models
+        html_content = self._create_multi_model_viewer_html(fbx_data_list)
+        
+        return html_content
+    
+    def _create_multi_model_viewer_html(self, fbx_data_list):
+        """Create Three.js HTML viewer for multiple FBX models."""
+        import json
+        
+        fbx_json = json.dumps(fbx_data_list)
+        
+        html = f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ margin: 0; overflow: hidden; background: #1a1a1a; }}
+        #canvas {{ width: 100%; height: 100vh; display: block; }}
+        #info {{
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: monospace;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+        }}
+        #controls {{
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            font-family: monospace;
+        }}
+        button {{
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 2px;
+            cursor: pointer;
+            border-radius: 3px;
+        }}
+        button:hover {{ background: #45a049; }}
+    </style>
+</head>
+<body>
+    <div id="info">
+        <div>Models: {len(fbx_data_list)}</div>
+        <div>Controls: Left-click drag to rotate, Right-click drag to pan, Scroll to zoom</div>
+    </div>
+    <div id="controls">
+        <button onclick="playAll()">▶ Play All</button>
+        <button onclick="pauseAll()">⏸ Pause All</button>
+        <button onclick="resetCamera()">🎥 Reset Camera</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.7.4/umd/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <script>
+        const fbxDataList = {fbx_json};
+        
+        let scene, camera, renderer, controls;
+        let mixers = [];
+        let clock = new THREE.Clock();
+        
+        init();
+        animate();
+        
+        function init() {{
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            scene.fog = new THREE.Fog(0x1a1a1a, 5, 15);
+            
+            // Camera
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(fbxDataList.length * 0.5, 1.2, 3.5);
+            
+            // Renderer
+            const canvas = document.getElementById('canvas');
+            renderer = new THREE.WebGLRenderer({{ canvas: canvas, antialias: true }});
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            
+            // Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(fbxDataList.length * 0.5, 1, 0);
+            controls.update();
+            
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(5, 10, 5);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+            
+            const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+            dirLight2.position.set(-5, 5, -5);
+            scene.add(dirLight2);
+            
+            // Ground plane
+            const groundGeometry = new THREE.PlaneGeometry(fbxDataList.length * 2 + 4, 10);
+            const groundMaterial = new THREE.MeshStandardMaterial({{ 
+                color: 0x333333,
+                roughness: 0.8,
+                metalness: 0.2
+            }});
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Grid helper
+            const gridHelper = new THREE.GridHelper(fbxDataList.length * 2 + 4, 20, 0x666666, 0x444444);
+            scene.add(gridHelper);
+            
+            // Load all FBX models
+            const loader = new THREE.FBXLoader();
+            
+            fbxDataList.forEach((fbxData, index) => {{
+                const binaryData = Uint8Array.from(atob(fbxData.data), c => c.charCodeAt(0));
+                const blob = new Blob([binaryData], {{ type: 'application/octet-stream' }});
+                const url = URL.createObjectURL(blob);
+                
+                loader.load(url, (fbx) => {{
+                    // Scale down the model to reasonable size
+                    fbx.scale.set(0.01, 0.01, 0.01);
+                    
+                    // Position models with spacing
+                    fbx.position.x = fbxData.x_offset;
+                    fbx.position.y = 0;
+                    fbx.position.z = 0;
+                    
+                    // Enable shadows
+                    fbx.traverse((node) => {{
+                        if (node.isMesh) {{
+                            node.castShadow = true;
+                            node.receiveShadow = true;
+                        }}
+                    }});
+                    
+                    scene.add(fbx);
+                    
+                    // Setup animation
+                    if (fbx.animations && fbx.animations.length > 0) {{
+                        const mixer = new THREE.AnimationMixer(fbx);
+                        fbx.animations.forEach((clip) => {{
+                            const action = mixer.clipAction(clip);
+                            action.play();
+                        }});
+                        mixers.push(mixer);
+                    }}
+                    
+                    // Add label
+                    addLabel(fbxData.name, fbxData.x_offset);
+                }}, undefined, (error) => {{
+                    console.error('Error loading FBX:', error);
+                }});
+            }});
+            
+            // Window resize
+            window.addEventListener('resize', onWindowResize);
+        }}
+        
+        function addLabel(text, xPos) {{
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 64;
+            
+            context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            context.font = '24px monospace';
+            context.fillStyle = 'white';
+            context.textAlign = 'center';
+            context.fillText(text.replace('.fbx', ''), canvas.width / 2, canvas.height / 2 + 8);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({{ map: texture }});
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.position.set(xPos, 2.5, 0);
+            sprite.scale.set(1, 0.125, 1);
+            scene.add(sprite);
+        }}
+        
+        function onWindowResize() {{
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }}
+        
+        function animate() {{
+            requestAnimationFrame(animate);
+            
+            const delta = clock.getDelta();
+            mixers.forEach(mixer => mixer.update(delta));
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }}
+        
+        function playAll() {{
+            mixers.forEach(mixer => {{
+                mixer._actions.forEach(action => {{
+                    action.paused = false;
+                    action.play();
+                }});
+            }});
+        }}
+        
+        function pauseAll() {{
+            mixers.forEach(mixer => {{
+                mixer._actions.forEach(action => {{
+                    action.paused = true;
+                }});
+            }});
+        }}
+        
+        function resetCamera() {{
+            camera.position.set(fbxDataList.length * 0.5, 1.2, 3.5);
+            controls.target.set(fbxDataList.length * 0.5, 0.85, 0);
+            controls.update();
+        }}
+    </script>
+</body>
+</html>
+'''
+        return html
 
     def _get_example_choices(self):
         """Get all example choices from all data sources"""
@@ -641,6 +1012,19 @@ class T2MGradioUI:
                         label="📊 Status Information",
                         value=status_msg,
                     )
+
+                    # Custom FBX Upload section
+                    with gr.Accordion("🎭 Custom FBX Skeleton (Optional)", open=False):
+                        self.custom_fbx_upload = gr.File(
+                            label="Upload Custom FBX Character",
+                            file_types=[".fbx"],
+                            type="filepath",
+                        )
+                        gr.Markdown(
+                            "> **Upload a custom FBX character to retarget the generated motion (e.g., Mixamo characters)**\n\n"
+                            "> If you upload a custom FBX, the motion will be retargeted to your character's skeleton. "
+                            "This is useful for applying motions to game characters, avatars, or any rigged FBX model."
+                        )
 
                     # FBX Download section
                     with gr.Row(visible=False) as self.fbx_download_row:
@@ -773,6 +1157,7 @@ class T2MGradioUI:
                 self.seed_input,
                 self.duration_slider,
                 self.cfg_slider,
+                self.custom_fbx_upload,
             ],
             outputs=[self.output_display, self.fbx_files],
             concurrency_limit=NUM_WORKERS,
