@@ -43,6 +43,17 @@ from .interactive_viz import (
     InteractiveRayVisualizer,
     create_html_visualization,
 )
+from .wireless_sensing import (
+    WirelessSensingProcessor,
+    WirelessSensingConfig,
+    MotionWirelessDataset,
+    compute_signal_features,
+    compare_signal_representations,
+)
+from .signal_visualization import (
+    SignalVisualizer,
+    create_summary_report,
+)
  
 __all__ = [
     # Ray Visualization
@@ -60,4 +71,13 @@ __all__ = [
     # Interactive Visualization
     "InteractiveRayVisualizer",
     "create_html_visualization",
+    # Wireless Sensing
+    "WirelessSensingProcessor",
+    "WirelessSensingConfig",
+    "MotionWirelessDataset",
+    "compute_signal_features",
+    "compare_signal_representations",
+    # Signal Visualization
+    "SignalVisualizer",
+    "create_summary_report",
 ]
