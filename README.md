@@ -33,6 +33,7 @@
 
 
 ## 🔥 News
+- **Oct 30, 2026**: [FlowHMR](https://github.com/flowhmr/flowhmr) — A Video2Motion (V2M) model built on HY-Motion-1.0 that converts human motion videos into high-quality 3D motion sequences (.fbx) and runs on a single consumer GPU with 12+ GB of VRAM (e.g., RTX 5080).
 - **Jan 29, 2026**: 📊 We released the evaluation prompts and code for **SSAE** (Structured Semantic Alignment Evaluation), a VLM-based metric designed to assess the semantic alignment of generated videos. Check the `ssae` directory for usage details!
 - **Dec 30, 2025**: 🤗 We released the inference code and pretrained models of [HY-Motion 1.0](https://huggingface.co/tencent/HY-Motion-1.0). Please give it a try via our [HuggingFace Space](https://huggingface.co/spaces/tencent/HY-Motion-1.0) and our [Official Site](https://hunyuan.tencent.com/motion)!
 
@@ -177,7 +178,9 @@ If you found this repository helpful, please cite our reports:
 We appreciate the community for creating integrations for HY-Motion! Here are some third-party implementations:
 - [Kaggle Notebook Implementation](https://www.kaggle.com/code/kushagra77kushwaha/hy-motion-1-0) by [@kushagra77kushwaha](https://github.com/kkso19999999-design) — An optimized, one-click CLI environment pre-configured to run text-to-animation generations seamlessly on free-tier P100 GPUs.
 - [ComfyUI-HY-Motion1](https://github.com/jtydhr88/ComfyUI-HY-Motion1) by [@jtydhr88](https://github.com/jtydhr88)
-- [FlowHMR](https://github.com/flowhmr/flowhmr) — A Video2Motion (V2M) model based on HY-Motion-1.0 that can accept human motion videos and produce high-quality 3D motion sequences (.fbx). 
+- [FlowHMR](https://github.com/flowhmr/flowhmr) — A Video2Motion (V2M) model built on HY-Motion-1.0 that converts human motion videos into high-quality 3D motion sequences (.fbx) and runs on a single consumer GPU with 12+ GB of VRAM (e.g., RTX 5080).
+
+
 
 ## Acknowledgements
 
