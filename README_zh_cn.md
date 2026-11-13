@@ -36,7 +36,7 @@
 
 
 ## 🔥 最新消息
-- **2026年10月30日**：[FlowHMR](https://github.com/flowhmr/flowhmr) — 基于 HY-Motion 1.0 构建的 **Video2Motion（V2M）**模型，可将人体动作视频转换为高质量的 3D 动作序列（.fbx），仅需一张 12GB 及以上显存的消费级显卡（如 RTX 5080）即可运行。
+- **2026年10月30日**：[FlowHMR](https://github.com/flowhmr/flowhmr) — 基于 HY-Motion 1.0 构建的 **Video2Motion**(**V2M**) 模型，可将人体动作视频转换为高质量的 3D 动作序列（.fbx），仅需一张 12GB 及以上显存的消费级显卡（如 RTX 5080）即可运行。
 - **2026年1月29日**: 📊 我们发布了 **SSAE** (Structured Semantic Alignment Evaluation) 评测指令和代码，这是一种基于 VLM 评估视频生成语义对齐度的方法。欢迎前往 `ssae` 目录查看使用详情！
 - **2025年12月30日**: 🤗 我们发布了 [HY-Motion 1.0](https://huggingface.co/tencent/HY-Motion-1.0) 的推理代码和预训练模型。欢迎通过我们的 [HuggingFace Space](https://huggingface.co/spaces/tencent/HY-Motion-1.0) 和 [官方网站](https://hunyuan.tencent.com/motion) 进行试用！
 
